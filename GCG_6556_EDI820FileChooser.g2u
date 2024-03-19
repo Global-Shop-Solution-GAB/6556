@@ -1,0 +1,214 @@
+﻿Program.Sub.ScreenSU.Start
+Gui.Form..Create(DashForm)
+Gui.Form..Caption("Choose File(s) to Build an EDI 820 File")
+Gui.Form..Size(1194,720)
+Gui.Form..MinX(0)
+Gui.Form..MinY(0)
+Gui.Form..Position(0,0)
+Gui.Form..MousePointer(0)
+Gui.Form..BarHelpButton(False,"","","",1.0.0,"11/15/2021 1:16:51 PM","",0,0,False)
+Gui.Form..AlwaysOnTop(False)
+Gui.Form..FontName("Tahoma")
+Gui.Form..FontSize(8.25)
+Gui.Form..ControlBox(True)
+Gui.Form..MaxButton(True)
+Gui.Form..MinButton(True)
+Gui.Form..Moveable(True)
+Gui.Form..Sizeable(True)
+Gui.Form..ShowInTaskBar(True)
+Gui.Form..TitleBar(True)
+Gui.Form..BarExportButton(False)
+Gui.Form..BarSaveButton(False,False)
+Gui.Form..Event(UnLoad,Form_UnLoad)
+Gui.Form..BarInternalButton(False)
+Gui.Form..Event(UserButtonClicked,Form_UserButtonClicked)
+Gui.Form.GsGcEDI820.Create(GsGridControl)
+Gui.Form.GsGcEDI820.Enabled(True)
+Gui.Form.GsGcEDI820.Visible(True)
+Gui.Form.GsGcEDI820.Zorder(0)
+Gui.Form.GsGcEDI820.Size(1194,690)
+Gui.Form.GsGcEDI820.Position(0,0)
+Gui.Form.GsGcEDI820.Dock(5)
+Gui.Form.GsGcEDI820.Event(RowCellClick,GsGcEDI820_RowCellClick)
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+	v.Global.sFolder.Declare
+	v.Global.sFile.Declare
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+	Function.Intrinsic.UI.UsePixels ' Allows you to use Pixels instead of Twips throughout
+	gui.Form..BarAddButton("FileBrowse","Add File(s)",v.Enum.Image!OPEN_COLOR,"",False)
+	gui.Form..BarAddButton("FileExport","Process File",v.Enum.Image!EXPORT_COLOR,"",False)
+	
+	f.Intrinsic.Control.callsub(SetCustomFolder)
+	
+	f.Intrinsic.Control.callsub(CheckUserLock)
+	
+	f.Intrinsic.Control.callsub(FormatGrid)
+
+	gui.Form..Show
+Program.Sub.Main.End
+
+Program.Sub.Form_UnLoad.Start
+	f.Intrinsic.Control.callsub(RemoveUserLock)
+	f.Intrinsic.Control.End
+Program.Sub.Form_UnLoad.End
+
+Program.Sub.Form_UserButtonClicked.Start
+	v.Local.sFile.Declare
+	
+	f.Intrinsic.Control.SelectCase(v.Args.Button)
+		f.Intrinsic.Control.Case("FileBrowse")
+			f.Intrinsic.Control.CallSub(BrowseFiles)
+		f.Intrinsic.Control.Case("FileExport")
+			f.Intrinsic.Control.CallSub(ExportFiles)
+	f.Intrinsic.Control.EndSelect
+Program.Sub.Form_UserButtonClicked.End
+
+Program.Sub.BrowseFiles.Start
+	v.Local.sChosenFiles.Declare
+	v.Local.iCnt.Declare
+	
+	'File browser with ability to select multiple files at once
+	f.Intrinsic.UI.ShowOpenFileDialog("", "", "512", v.Local.sChosenFiles)
+	
+	f.Intrinsic.Control.If(v.Local.sChosenFiles,<>,"***CANCEL***")
+		'Split files into separate files    ***NOTE: FLAG 512 IS NOT SUPPORTED AS OF 11/23/2021 BECAUSE IT WAS NEVER IMPLEMENTED.  HOPEFULLY IT WILL BE IN THE NEAR FUTURE.
+		'f.Intrinsic.String.Split(v.Local.sChosenFiles,"*!*",v.Local.sChosenFiles)
+		'Load Files into gridview
+		f.Intrinsic.Control.For(v.Local.iCnt,v.Local.sChosenFiles.LBound,v.Local.sChosenFiles.UBound,1)
+			f.Data.DataTable.AddRow("dtFiles","FilePath",v.Local.sChosenFiles(v.Local.iCnt),"Delete","Delete")
+		f.Intrinsic.Control.Next(v.Local.iCnt)
+	f.Intrinsic.Control.EndIf
+Program.Sub.BrowseFiles.End
+
+Program.Sub.ExportFiles.Start
+	v.Local.sFileContents.Declare
+	v.Local.iCnt.Declare
+	v.Local.sFinalFile.Declare
+	v.Local.sFinalFilePath.Declare
+	v.Local.bExists.Declare
+	v.Local.sNewFilePath.Declare
+	v.Local.iRet.Declare
+	v.Local.sErrorMsg.Declare
+	
+	'Check if there are any files to export
+	f.Intrinsic.Control.If(v.DataTable.dtFiles.RowCount,>,0)
+		'Combine all files into one massive file
+		f.Intrinsic.Control.For(v.Local.iCnt,0,v.DataTable.dtFiles.RowCount--,1)
+			'Read in the file's contents
+			F.Intrinsic.File.File2String(v.DataTable.dtFiles(v.Local.iCnt).FilePath!FieldVal,v.Local.sFileContents)
+			
+			'Add file contents to large file
+			f.Intrinsic.String.Build("{0}{1}",v.Local.sFinalFile,v.Local.sFileContents,v.Local.sFinalFile)
+		f.Intrinsic.Control.Next(v.Local.iCnt)
+		
+		'Create the new file
+		f.Intrinsic.String.Build("{0}\EA820{1}",V.Caller.FilesDir,v.Caller.CompanyCode,V.Local.sFinalFilePath)
+		F.Intrinsic.File.String2File(V.Local.sFinalFilePath,V.Local.sFinalFile)
+		
+		'Check to make sure the file exists
+		f.Intrinsic.File.Exists(v.Local.sFinalFilePath,v.Local.bExists)
+		f.Intrinsic.Control.If(v.Local.bExists)
+			'Rename each selected file to have extension .PROCESSED
+			f.Intrinsic.Control.For(v.Local.iCnt,0,v.DataTable.dtFiles.RowCount--,1)
+				'Add extension
+				f.Intrinsic.String.Build("{0}.PROCESSED",V.DataTable.dtFiles(V.Local.iCnt).FilePath!FieldVal,v.Local.sNewFilePath)
+				
+				'Add file contents to large file
+				f.Intrinsic.File.MoveFile(V.DataTable.dtFiles(V.Local.iCnt).FilePath!FieldVal,v.Local.sNewFilePath,v.Local.iRet)
+				
+				f.Intrinsic.Control.If(v.local.iRet,=,0)
+					f.Intrinsic.String.Build("Error renaming file {0}.  Please remove manually.",V.DataTable.dtFiles(V.Local.iCnt).FilePath!FieldVal,v.Local.sErrorMsg)
+					f.Intrinsic.UI.Msgbox(v.Local.sErrorMsg,"Error Renaming")
+				f.Intrinsic.Control.EndIf
+			f.Intrinsic.Control.Next(v.Local.iCnt)
+			
+			f.Intrinsic.UI.Msgbox("File EDI820 created successfully.  Accounts Receivable > Transactions > AR Remittance from EDI Transactions will launch now.")
+			
+			f.Intrinsic.Control.CallSub(ClearGrid)
+			
+			'Launch the menu option Accounts Receivable > Transactions > AR Remittance from EDI Transactions
+			f.Global.General.LaunchMenuTask(120, 0, v.Local.iRet)
+		F.Intrinsic.Control.Else
+			f.Intrinsic.UI.Msgbox("Error creating file EDI820.  Please try again.")
+		f.Intrinsic.Control.EndIf
+	f.Intrinsic.Control.EndIf
+	
+Program.Sub.ExportFiles.End
+
+Program.Sub.FormatGrid.Start
+	f.Data.DataTable.Create("dtFiles",true)
+	f.Data.DataTable.AddColumn("dtFiles","FilePath","string")
+	f.Data.DataTable.AddColumn("dtFiles","Delete","string")
+	
+	gui.Form.GsGcEDI820.AddGridviewFromDatatable("gvFiles","dtFiles")
+	gui.Form.GsGcEDI820.SetColumnProperty("gvFiles","FilePath",v.Enum.ColumnPropertyNames!HeaderFontBold,True)
+	gui.Form.GsGcEDI820.SetColumnProperty("gvFiles","Delete",v.Enum.ColumnPropertyNames!HeaderFontBold,True)
+	gui.Form.GsGcEDI820.SetColumnProperty("gvFiles","Delete",v.Enum.ColumnPropertyNames!CellBackColor,v.Color.LtGrey)
+	gui.Form.GsGcEDI820.SetColumnProperty("gvFiles","Delete",v.Enum.ColumnPropertyNames!ShowCaption,False)
+	gui.Form.GsGcEDI820.SetColumnProperty("gvFiles","Delete",v.Enum.ColumnPropertyNames!Width,1)
+	gui.Form.GsGcEDI820.SetGridviewProperty("gvFiles",v.Enum.GridViewPropertyNames!Editable,False)
+	gui.Form.GsGcEDI820.SetGridviewProperty("gvFiles",v.Enum.GridViewPropertyNames!ReadOnly,True)
+	gui.Form.GsGcEDI820.MainView("gvFiles")
+Program.Sub.FormatGrid.End
+
+Program.Sub.ClearGrid.Start
+	f.Data.DataTable.DeleteRow("dtFiles")
+Program.Sub.ClearGrid.End
+
+Program.Sub.SetUserLock.Start
+	V.Local.sText.Declare
+	
+	f.Intrinsic.String.Build("{0}",v.Caller.User,v.Local.sText)
+	f.Intrinsic.File.String2File(v.Global.sFile,v.Local.sText)
+Program.Sub.SetUserLock.End
+
+Program.Sub.CheckUserLock.Start
+	v.Local.bExists.Declare
+	v.Local.sText.Declare
+	
+	f.Intrinsic.String.Build("{0}{1}EDI820.LOCK",v.Global.sFolder,v.Caller.CompanyCode,V.Global.sFile)
+	f.Intrinsic.File.Exists(v.Global.sFile,v.Local.bExists)
+	
+	f.Intrinsic.Control.If(v.Local.bExists)
+		f.Intrinsic.File.File2String(v.Global.sFile,v.Local.sText)
+		
+		f.Intrinsic.Control.If(v.Local.sText,<>,v.Caller.User)
+			f.Intrinsic.String.Build("Program is locked for editing by user {0}.  Program will now close.  Please try again later.",v.Local.sText,v.Local.sText)
+			f.Intrinsic.UI.Msgbox(v.Local.sText,"EDI 820 Program Lock")
+			f.Intrinsic.Control.End
+		f.Intrinsic.Control.endif
+	f.Intrinsic.Control.Else
+		f.Intrinsic.Control.CallSub(SetUserLock)
+	f.Intrinsic.Control.EndIf
+Program.Sub.CheckUserLock.End
+
+Program.Sub.SetCustomFolder.Start
+	v.Local.bExists.Declare
+	
+	f.Intrinsic.String.Build("{0}\CUSTOM\EDI820\",v.Caller.GlobalDir,v.Global.sFolder)
+	f.Intrinsic.File.DirExists(v.Global.sFolder,v.Local.bExists)
+	
+	f.Intrinsic.Control.If(v.Local.bExists,=,False)
+		f.Intrinsic.File.CreateDir(v.Global.sFolder)
+	f.Intrinsic.Control.EndIf
+Program.Sub.SetCustomFolder.End
+
+Program.Sub.RemoveUserLock.Start
+	f.Intrinsic.File.DeleteFile(v.Global.sFile)
+Program.Sub.RemoveUserLock.End
+
+Program.Sub.GsGcEDI820_RowCellClick.Start
+
+	f.Intrinsic.Control.If(v.Args.Column,=,"Delete")
+		f.Data.DataTable.DeleteRow("dtFiles",v.Args.rowindex)
+	f.Intrinsic.Control.EndIf
+Program.Sub.GsGcEDI820_RowCellClick.End
+
+Program.Sub.Comments.Start
+${$5$}$3.0.0.0$}$1
+${$6$}$dduncan$}$20211124112032417$}$r0o+00bj735YsiGsQ60YIo/Zb+26OZQGngWjcT4ESvmrTYdXIUn8TZ9K/rYs7YXfH9xzVYqj5vs=
+Program.Sub.Comments.End
